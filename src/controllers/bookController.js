@@ -2,21 +2,58 @@ import path from 'path';
 import fs from 'fs';
 import Book from '../models/Book.js';
 import Bookmark from '../models/Bookmark.js';
+import User from '../models/User.js';
+import Feedback from '../models/Feedback.js';
+import Tag from '../models/Tag.js';
+import Category from '../models/Category.js';
 import { sendNewReleaseMail } from '../utils/helper.js';
+import Author from '../models/Author.js';
 
 const uploadBook = async (req, res) => {
   try {
     const file = req.file;
     if (!file) return res.status(400).json({ message: 'No file uploaded' });
 
-    const { title, description = '', authors = '[]', categories = '[]', tags = '[]' } = req.body;
+    const { title, description, authorIds, categoriesIds, tagsIds } = req.body;
+    if (!title) return res.status(400).json({ message: 'Title is required' });
+    if (!authorIds) return res.status(400).json({ message: 'At least one author is required' });
+    if (!categoriesIds) return res.status(400).json({ message: 'At least one category is required' });
+    if (!tagsIds) return res.status(400).json({ message: 'At least one tag is required' });
+
+    const toArray = (data) => {
+        if (!data) return [];
+        return Array.isArray(data) ? data : [data];
+    };
+
+    const finalAuthors = toArray(authorIds);
+    const finalCategories = toArray(categoriesIds);
+    const finalTags = toArray(tagsIds);
+
+    const validCategories = [];
+    for (const catId of finalCategories) {
+      const category = await Category.findById(catId);
+      if (!category) return res.status(400).json({ message: `Category ID ${catId} not found` });
+      validCategories.push(catId);
+    }
+
+    for (const tagId of finalTags) {
+      const tag = await Tag.findById(tagId); 
+      if (!tag) return res.status(400).json({ message: `Tag ID ${tagId} not found` });
+    }
+
+    const validAuthors = [];
+    for (const authorId of finalAuthors) {
+      const author = await Author.findById(authorId);
+      if (!author) return res.status(400).json({ message: `Author ID ${authorId} not found` });
+      validAuthors.push(authorId);
+    }
 
     const book = new Book({
       title,
       description,
-      authors: JSON.parse(authors),
-      categories: JSON.parse(categories),
-      tags: JSON.parse(tags),
+      authors: validAuthors,      
+      categories: validCategories, 
+      tags: finalTags,
       filename: file.originalname,
       filepath: file.path, 
       mimetype: file.mimetype,
@@ -25,11 +62,11 @@ const uploadBook = async (req, res) => {
     });
 
     await book.save();
-    await sendNewReleaseMail(title, req.user.email);
+    
     res.status(201).json({ message: 'Book uploaded', book });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Upload failed' });
+    console.error("Upload Error:", error); 
+    res.status(500).json({ message: 'Upload failed', error: error.message });
   }
 };
 
@@ -51,7 +88,7 @@ const listBooks = async (req, res) => {
       .lean();
 
     const total = await Book.countDocuments(filter);
-    res.json({ data: books, page: Number(page), limit: Number(limit), total });
+    res.json({ books: books, page: Number(page), limit: Number(limit), total });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Failed to list books' });
@@ -90,12 +127,23 @@ const serveBookFile = async (req, res) => {
 
 const addFeedback = async (req, res) => {
   try {
-    const { feedback } = req.body;
-    if (!feedback) return res.status(400).json({ message: 'Feedback is required' });  
+    const { feedback, stars } = req.body;
+    if (!stars) return res.status(400).json({ message: 'Stars is required' });  
     const book = await Book.findById(req.params.id);
+    const email = req.user.email;
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: 'User not found' });
     if (!book) return res.status(404).json({ message: 'Book not found' });
-    book.feedback.push(feedback);
-    await book.save();
+    
+    const fb = new Feedback({
+      bookId: book._id,
+      userId: user._id,
+      comment: feedback || '',
+      stars
+    });
+
+    await fb.save();
+
     res.json({ message: 'Feedback added', feedback: book.feedback });
   } catch (err) {
     console.error(err);
@@ -103,4 +151,25 @@ const addFeedback = async (req, res) => {
   }
 };
 
-export { uploadBook, listBooks, getBook, serveBookFile, addFeedback };
+const updateBook = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, description, authorIds, tagIds, categoryIds } = req.body;
+    const updateData = {};
+    if (title) updateData.title = title;
+    if (description) updateData.description = description;
+    if (authorIds) updateData.authors = JSON.parse(authorIds);
+    if (tagIds) updateData.tags = JSON.parse(tagIds);
+    if (categoryIds) updateData.categories = JSON.parse(categoryIds);
+
+    const book = await Book.findByIdAndUpdate(id, updateData, { new: true });
+    if (!book) return res.status(404).json({ message: 'Book not found' });
+
+    res.json({ message: 'Book updated', data: book });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to update book' });
+  }
+};
+
+export { uploadBook, listBooks, getBook, serveBookFile, addFeedback, updateBook };

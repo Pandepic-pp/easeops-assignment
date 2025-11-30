@@ -8,9 +8,8 @@ const verifyAuthToken = async (req, res, next) => {
     }
     try {
         const jwtPayload = jwt.verify(token, process.env.JWT_SECRET);
-        const storedToken = await Token.findOne({ email: jwtPayload.email, token });
-        if (!storedToken || new Date() > storedToken.expiresAt) {
-            return res.status(403).json({ message: 'Invalid or expired token'});
+        if (!jwtPayload.email) {
+            return res.status(403).json({ message: 'Invalid token payload' });
         }
         req.user = jwtPayload;
         next();

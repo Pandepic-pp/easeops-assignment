@@ -10,3 +10,4 @@ const bookmarkSchema = new Schema({
 
 const Bookmark = model('Bookmark', bookmarkSchema);
 export default Bookmark;
+

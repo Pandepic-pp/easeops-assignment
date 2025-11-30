@@ -23,7 +23,7 @@ const login = async (req, res) => {
         await Token.findOneAndUpdate(user._id, {
             email: req.body.email,
             token: accessToken,
-            expiresAt: new Date(Date.now() + 7*24*60*60*1000)
+            expiresAt: new Date(Date.now() + 7*24*60*60*1000),
         }, {upsert: true, new: true});
         res.status(200).json({accessToken, role: user.role, message: 'Login successful'});
     } catch (error) {

@@ -27,14 +27,16 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-const sendNewReleaseMail = async (title, email) => {
+const sendNewReleaseMail = async (title, emails) => {
   try {
-    await transporter.sendMail({
-      from: `"MyApp" <${SMTP_USER}>`,
-      to: email,
-      subject: "New release notification",
-      text: `New book titled "${title}" has been added to the collection.`,
-    });
+    for (const email in emails) {
+      await transporter.sendMail({
+        from: `"MyApp" <${SMTP_USER}>`,
+        to: email,
+        subject: "New release notification",
+        text: `New book titled "${title}" has been added to the collection.`,
+      });
+    }
     return true;
   } catch (err) {
     console.log('Error sending email:', err);
